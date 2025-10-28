@@ -25,38 +25,42 @@ It helps users efficiently track their **income, expenses, and budgets**, all th
 
 ## 🗂️ Project Structure
 
-D:\DotProduct\
+D:\DotProduct
 │
-├── budget-tracker-backend\
-│   ├── backend\                # Django project folder
-│   ├── finance\                # Django app folder
-│   ├── .venv\                  # Virtual environment
-│   ├── manage.py
-│   └── requirements.txt
+├── budget-tracker-backend
+│ ├── backend\ # Django project folder
+│ ├── finance\ # Django app folder
+│ ├── .venv\ # Virtual environment
+│ ├── manage.py
+│ └── requirements.txt
 │
-└── budget-tracker-frontend\
-    ├── src\                    # React TypeScript source
-    ├── public\
-    ├── package.json
-    ├── vite.config.ts
-    └── tsconfig.json
+└── budget-tracker-frontend
+├── src\ # React TypeScript source
+├── public
+├── package.json
+├── vite.config.ts
+└── tsconfig.json
 
 
-📦 Backend Setup (Django API)
 
+---
+
+## ⚙️ Backend Setup (Django API)
+
+```bash
 # Navigate to backend directory
-cd budget-tracker-backend
+cd D:\DotProduct\budget-tracker-backend
 
-# Create virtual environment (optional but recommended)
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Activate virtual environment
+.venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-#Run Backend Project
+# Run Django server
 cd backend
 py manage.py runserver
+
 
 
 🎨 Frontend Setup (React + Vite + TypeScript)
@@ -69,3 +73,42 @@ npm install
 
 # Start development server
 npm run dev
+
+
+🔑 Demo Credentials
+
+Use these credentials to log in and test the app:
+
+Username: Admin
+Password: Admin123
+
+
+
+🧠 Tech Stack
+
+Frontend: React + TypeScript + TailwindCSS + Vite + D3.js
+Backend: Django + Django REST Framework
+Database: SQLite (default, easy setup)
+Authentication: Token-based authentication (DRF)
+
+
+
+📸 Dashboard Preview
+
+The dashboard includes:
+
+Income vs Expense (green for income, red for expense)
+
+Budget vs Actual comparison
+
+Recent transactions table
+
+Link to full transaction history
+
+
+✅ Author: Usaib Peer
+📍 Project Path:
+
+Backend → D:\DotProduct\budget-tracker-backend
+
+Frontend → D:\DotProduct\budget-tracker-frontend
