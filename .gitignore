@@ -1,0 +1,92 @@
+# ============================
+# OS & Editor Files
+# ============================
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+.vscode/
+.idea/
+.env
+.env.local
+*.sqlite3
+
+# ============================
+# Python / Django Backend
+# ============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.py.class
+*.egg
+*.egg-info/
+.eggs/
+.Python
+db.sqlite3
+.env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+migrations/__pycache__/
+backend/__pycache__/
+backend/*/__pycache__/
+
+# Django media and static files
+media/
+static/
+staticfiles/
+*.mo
+*.pot
+
+# Byte-compiled / cache
+*.pyc
+__pycache__/
+
+# VS Code Python environment
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+*.py,cover
+*.log
+.tox/
+nosetests.xml
+coverage.xml
+
+# ============================
+# Node / React Frontend
+# ============================
+node_modules/
+dist/
+build/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+vite.config.ts.timestamp-*
+.vite/
+coverage/
+
+# ============================
+# Environment / Secrets
+# ============================
+*.env
+*.env.production
+*.env.development
+.env.local
+.env.*.local
+
+# ============================
+# Misc
+# ============================
+package-lock.json
+yarn.lock
+*.iml
+*.sublime-project
+*.sublime-workspace
