@@ -183,7 +183,7 @@ export default function TransactionForm() {
             const payload = {
                 // keep payload as 'category' like your current backend expects;
                 // if your serializer expects 'category_id' instead, change this key accordingly
-                category: data.category_id ? parseInt(data.category_id) : null,
+                category_id: data.category_id ? parseInt(data.category_id) : null,
                 amount: parseFloat(data.amount),
                 date: data.date,
                 note: data.note,

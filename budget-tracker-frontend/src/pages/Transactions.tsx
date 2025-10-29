@@ -1,3 +1,4 @@
+
 'use client';
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
@@ -8,6 +9,9 @@ import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import { useConfirmModal } from '../components/ui/modal/useConfirmModal';
 import Message from '../components/Messages';
 import Badge from '../components/ui/badge/Badge';
+import SearchInput from '../components/form/input/SearchInput';
+import FilterSelect from '../components/form/input/FilterSelect';
+import Dropdown from '../components/form/input/Dropdown';
 
 export default function Transactions() {
     const [items, setItems] = useState<Transaction[]>([]);
@@ -24,10 +28,17 @@ export default function Transactions() {
     } | null>(null);
 
     const [categoriesMap, setCategoriesMap] = useState<Record<string, string>>({});
+    const [categories, setCategories] = useState<Array<{ value: string; label: string }>>([]);
 
-    const itemsPerPage = 4;
+    // Filter states - CHANGED: using searchKey instead of searchId
+    const [searchKey, setSearchKey] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedType, setSelectedType] = useState('ALL');
+    const [open, setOpen] = useState(false);
 
-    // fetch categories and build id -> name map
+    const itemsPerPage = 5;
+
+    // Fetch categories and build id -> name map
     const fetchCategories = async () => {
         try {
             const res = await api.get('finance/categories/');
@@ -39,128 +50,163 @@ export default function Transactions() {
             }
             if (!Array.isArray(data)) data = [];
             const map: Record<string, string> = {};
+            const categoryOptions: Array<{ value: string; label: string }> = [
+                { value: '', label: 'All' }
+            ];
+
             for (const c of data) {
                 if (c && (c.id !== undefined)) {
                     map[String(c.id)] = c.name || `Category ${c.id}`;
+                    categoryOptions.push({
+                        value: String(c.id),
+                        label: c.name || `Category ${c.id}`
+                    });
                 }
             }
             setCategoriesMap(map);
+            setCategories(categoryOptions);
         } catch (err: any) {
             console.warn('[Transactions] failed to load categories', err?.message || err);
             setCategoriesMap({});
+            setCategories([{ value: '', label: 'All' }]);
         }
     };
 
+    const buildApiUrl = (page: number) => {
+        let url = `finance/transactions/`;
+        const params: Record<string, any> = {
+            page,
+            page_size: itemsPerPage,
+            limit: itemsPerPage
+        };
+
+        // Add filters to params - CHANGED: using searchKey and proper parameter names
+        if (searchKey) params.searchKey = searchKey;
+        if (selectedCategory) params.category = selectedCategory;
+        if (selectedType && selectedType !== 'ALL') {
+            params.is_income = selectedType === 'Income';
+        }
+
+        return { url, params };
+    };
+
     const fetchTransactions = async (pageNo: number) => {
-    setLoading(true);
-    setError(null);
+        setLoading(true);
+        setError(null);
 
-    const attempts: Array<{
-        desc: string;
-        url?: string;
-        params?: Record<string, any>;
-        rawUrl?: string;
-    }> = [
-        { desc: 'query (page=pageNo, page_size & limit)', url: 'finance/transactions/', params: { page: pageNo, page_size: itemsPerPage, limit: itemsPerPage } },
-        { desc: 'query (page=pageNo-1 zero-based)', url: 'finance/transactions/', params: { page: pageNo - 1, limit: itemsPerPage } },
-        { desc: 'query (page=pageNo only)', url: 'finance/transactions/', params: { page: pageNo } },
-        { desc: 'raw query ?page=...&limit=...', rawUrl: `finance/transactions/?page=${pageNo}&limit=${itemsPerPage}` },
-        { desc: 'path /page/{n}/', rawUrl: `finance/transactions/page/${pageNo}/` },
-        { desc: 'path /{n}/', rawUrl: `finance/transactions/${pageNo}/` },
-        { desc: 'base endpoint (no page param) — fallback', url: 'finance/transactions/', params: {} },
-    ];
+        const { url, params } = buildApiUrl(pageNo);
 
-    let usedResponseData: any = null;
-    let success = false;
-    let lastErr: any = null;
+        const attempts: Array<{
+            desc: string;
+            url?: string;
+            params?: Record<string, any>;
+            rawUrl?: string;
+        }> = [
+                { desc: 'query (page=pageNo, page_size & limit)', url, params },
+                { desc: 'query (page=pageNo-1 zero-based)', url, params: { ...params, page: pageNo - 1 } },
+                { desc: 'query (page=pageNo only)', url, params: { page: pageNo } },
+                {
+                    desc: 'raw query with filters',
+                    rawUrl: `finance/transactions/?page=${pageNo}&limit=${itemsPerPage}${searchKey ? `&searchKey=${encodeURIComponent(searchKey)}` : ''
+                        }${selectedCategory ? `&category=${encodeURIComponent(selectedCategory)}` : ''
+                        }${selectedType && selectedType !== 'ALL' ? `&is_income=${selectedType === 'Income'}` : ''
+                        }`
+                },
+                { desc: 'path /page/{n}/', rawUrl: `finance/transactions/page/${pageNo}/` },
+                { desc: 'path /{n}/', rawUrl: `finance/transactions/${pageNo}/` },
+                { desc: 'base endpoint (no page param) — fallback', url, params: {} },
+            ];
 
-    for (const attempt of attempts) {
-        try {
-            let res;
-            if (attempt.rawUrl) {
-                res = await api.get(attempt.rawUrl);
-            } else {
-                res = await api.get(attempt.url!, { params: attempt.params });
+        let usedResponseData: any = null;
+        let success = false;
+        let lastErr: any = null;
+
+        for (const attempt of attempts) {
+            try {
+                let res;
+                if (attempt.rawUrl) {
+                    res = await api.get(attempt.rawUrl);
+                } else {
+                    res = await api.get(attempt.url!, { params: attempt.params });
+                }
+                usedResponseData = res.data;
+                success = true;
+                break;
+            } catch (err: any) {
+                lastErr = err;
+                console.warn(`[Transactions] attempt failed (${attempt.desc}):`, err?.response?.status || err?.message);
+                // try next
             }
-            usedResponseData = res.data;
-            success = true;
-            break;
-        } catch (err: any) {
-            lastErr = err;
-            console.warn(`[Transactions] attempt failed (${attempt.desc}):`, err?.response?.status || err?.message);
-            // try next
         }
-    }
 
-    if (!success) {
-        setError(lastErr?.message || `Failed to fetch transactions (status: ${lastErr?.response?.status || 'unknown'})`);
-        setItems([]);
-        setCount(0);
-        setTotalPages(1);
-        setLoading(false);
-        return;
-    }
+        if (!success) {
+            setError(lastErr?.message || `Failed to fetch transactions (status: ${lastErr?.response?.status || 'unknown'})`);
+            setItems([]);
+            setCount(0);
+            setTotalPages(1);
+            setLoading(false);
+            return;
+        }
 
-    // Normalize response shapes
-    const data = usedResponseData;
-    let serverItems: Transaction[] = [];
-    let totalCount = 0;
-    let serverPaginated = false; // whether server returned page-specific items
+        // Normalize response shapes
+        const data = usedResponseData;
+        let serverItems: Transaction[] = [];
+        let totalCount = 0;
+        let serverPaginated = false; // whether server returned page-specific items
 
-    if (Array.isArray(data)) {
-        serverItems = data;
-        totalCount = data.length;
-        serverPaginated = false;
-    } else if (data && Array.isArray(data.results)) {
-        serverItems = data.results;
-        totalCount = typeof data.count === 'number' ? data.count : serverItems.length;
-        serverPaginated = true;
-    } else if (data && data.data && Array.isArray(data.data.list)) {
-        serverItems = data.data.list;
-        totalCount = typeof data.data.total === 'number' ? data.data.total : serverItems.length;
-        serverPaginated = true;
-    } else if (data && Array.isArray(data.list)) {
-        serverItems = data.list;
-        totalCount = typeof data.total === 'number' ? data.total : serverItems.length;
-        serverPaginated = true;
-    } else {
-        const arr = Object.values(data || {}).find(Array.isArray) as any;
-        if (Array.isArray(arr)) {
-            serverItems = arr;
-            totalCount = serverItems.length;
+        if (Array.isArray(data)) {
+            serverItems = data;
+            totalCount = data.length;
             serverPaginated = false;
+        } else if (data && Array.isArray(data.results)) {
+            serverItems = data.results;
+            totalCount = typeof data.count === 'number' ? data.count : serverItems.length;
+            serverPaginated = true;
+        } else if (data && data.data && Array.isArray(data.data.list)) {
+            serverItems = data.data.list;
+            totalCount = typeof data.data.total === 'number' ? data.data.total : serverItems.length;
+            serverPaginated = true;
+        } else if (data && Array.isArray(data.list)) {
+            serverItems = data.list;
+            totalCount = typeof data.total === 'number' ? data.total : serverItems.length;
+            serverPaginated = true;
         } else {
-            serverItems = [];
-            totalCount = 0;
-            serverPaginated = false;
+            const arr = Object.values(data || {}).find(Array.isArray) as any;
+            if (Array.isArray(arr)) {
+                serverItems = arr;
+                totalCount = serverItems.length;
+                serverPaginated = false;
+            } else {
+                serverItems = [];
+                totalCount = 0;
+                serverPaginated = false;
+            }
         }
-    }
 
-    if (!totalCount && serverItems.length) totalCount = serverItems.length;
+        if (!totalCount && serverItems.length) totalCount = serverItems.length;
 
-    const serverReturnedTooMany = serverItems.length > itemsPerPage;
-    const serverReturnedFullListButMarkedPaginated = serverPaginated && totalCount > itemsPerPage && serverItems.length === totalCount;
+        const serverReturnedTooMany = serverItems.length > itemsPerPage;
+        const serverReturnedFullListButMarkedPaginated = serverPaginated && totalCount > itemsPerPage && serverItems.length === totalCount;
 
-    const needClientSidePagination = !serverPaginated || serverReturnedTooMany || serverReturnedFullListButMarkedPaginated;
+        const needClientSidePagination = !serverPaginated || serverReturnedTooMany || serverReturnedFullListButMarkedPaginated;
 
-    let finalItems: Transaction[] = [];
+        let finalItems: Transaction[] = [];
 
-    if (needClientSidePagination) {
-        const fullList = serverItems;
-        const start = (pageNo - 1) * itemsPerPage;
-        const paged = fullList.slice(start, start + itemsPerPage);
-        finalItems = paged;
-    } else {
-        finalItems = serverItems || [];
-    }
+        if (needClientSidePagination) {
+            const fullList = serverItems;
+            const start = (pageNo - 1) * itemsPerPage;
+            const paged = fullList.slice(start, start + itemsPerPage);
+            finalItems = paged;
+        } else {
+            finalItems = serverItems || [];
+        }
 
-    setItems(finalItems);
-    setCount(totalCount);
-    setCurrentPage(pageNo);
-    setTotalPages(Math.max(1, Math.ceil((totalCount || 0) / itemsPerPage)));
-    setLoading(false);
-};
-
+        setItems(finalItems);
+        setCount(totalCount);
+        setCurrentPage(pageNo);
+        setTotalPages(Math.max(1, Math.ceil((totalCount || 0) / itemsPerPage)));
+        setLoading(false);
+    };
 
     const handleDeleteTransaction = async (id: number, amount: string) => {
         openModal({
@@ -192,13 +238,111 @@ export default function Transactions() {
         fetchTransactions(page);
     };
 
+    const handleSearch = () => {
+        setCurrentPage(1);
+        fetchTransactions(1);
+    };
+
+    const handleFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
+        setter(value);
+        setCurrentPage(1);
+    };
+
+    const handleTypeChange = (typeValue: string) => {
+        setSelectedType(typeValue);
+        setCurrentPage(1);
+        setOpen(false);
+    };
+
+    const handleToggle = () => {
+        setOpen((prev) => !prev);
+    };
+
     const formatDateToDDMMYYYY = (dateString: string) => {
         if (!dateString) return '-';
         const date = new Date(dateString);
         return date.toLocaleDateString('en-GB');
     };
 
-    // columns now read categoriesMap for numeric ids
+    // Type options for dropdown
+    const typeOptions = [
+        { value: 'ALL', label: 'All' },
+        { value: 'Income', label: 'Income' },
+        { value: 'Expense', label: 'Expense' },
+    ];
+
+    const typeNames: Record<string, string> = {
+        'ALL': 'All',
+        'Income': 'Income',
+        'Expense': 'Expense',
+    };
+
+    const typeIcons: Record<string, React.ReactNode> = {
+        'ALL': (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+            </svg>
+        ),
+        'Income': (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+            </svg>
+        ),
+        'Expense': (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6 9 12.75l4.286-4.286a11.948 11.948 0 0 1 4.306 6.43l.776 2.898m0 0 3.182-5.511m-3.182 5.51-5.511-3.181" />
+            </svg>
+        ),
+    };
+
+    // Filter Section Component - CHANGED: using searchKey and proper placeholder
+    const TransactionFilters = () => (
+        <div className="grid grid-cols-12 gap-4 mb-6">
+            {/* Search by ID - 6 columns */}
+            <div className="col-span-12 md:col-span-6">
+                <SearchInput
+                    value={searchKey}
+                    onChange={setSearchKey}
+                    onSearch={handleSearch}
+                    placeholder="Search by ID or Note..."
+                />
+            </div>
+
+            {/* Filter by Category - 4 columns */}
+            <div className="col-span-12 md:col-span-4">
+                <FilterSelect
+                    options={categories}
+                    value={selectedCategory}
+                    onChange={handleFilterChange(setSelectedCategory)}
+                    placeholder="Filter by category"
+                />
+            </div>
+
+            {/* Filter by Type - 2 columns */}
+            <div className="col-span-12 md:col-span-2 flex justify-end">
+                <Dropdown
+                    name={typeNames[selectedType]}
+                    value={typeNames[selectedType]}
+                    open={open}
+                    close={handleToggle}
+                >
+                    {typeOptions.map((option) => (
+                        <li key={option.value}>
+                            <button
+                                onClick={() => handleTypeChange(option.value)}
+                                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                            >
+                                <span className="flex-shrink-0">{typeIcons[option.value]}</span>
+                                <span>{option.label}</span>
+                            </button>
+                        </li>
+                    ))}
+                </Dropdown>
+            </div>
+        </div>
+    );
+
+    // columns remain the same...
     const columns = [
         {
             header: 'ID',
@@ -224,9 +368,8 @@ export default function Transactions() {
             header: 'Amount',
             accessor: (transaction: Transaction) => (
                 <span
-                    className={`font-semibold ${
-                        transaction.is_income ? 'text-green-600' : 'text-red-600'
-                    }`}
+                    className={`font-semibold ${transaction.is_income ? 'text-green-600' : 'text-red-600'
+                        }`}
                 >
                     {Number(transaction.amount).toLocaleString()}
                 </span>
@@ -309,6 +452,11 @@ export default function Transactions() {
         },
     ];
 
+    // Refetch when filters change
+    useEffect(() => {
+        fetchTransactions(currentPage);
+    }, [selectedCategory, selectedType]);
+
     // initialize: load categories first, then transactions
     useEffect(() => {
         (async () => {
@@ -343,11 +491,10 @@ export default function Transactions() {
             )}
             <ConfirmModal />
             <PageBreadcrumb pageTitle="Transactions List" />
-            
+
             {!loading && (
                 <>
                     <div className="flex justify-between items-center mb-6">
-                        {/* <h2 className="text-2xl font-bold text-blue-700">Transactions</h2> */}
                         <Link
                             to="/transactions/new"
                             className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-green-700"
@@ -368,6 +515,7 @@ export default function Transactions() {
 
                     <ReusableTable
                         tableName="Financial Transactions"
+                        filterSection={TransactionFilters()}
                         data={items}
                         columns={columns}
                         itemsPerPage={itemsPerPage}
