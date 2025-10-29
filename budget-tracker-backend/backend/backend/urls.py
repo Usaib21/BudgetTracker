@@ -28,7 +28,7 @@ urlpatterns = [
     # your finance app routes
     # path('api/finance/', include('finance.urls')),
     path('', lambda request: JsonResponse({'message': 'Budget Tracker API is live 🚀'})),
-    path('api/finance/', include('backend.finance.urls')),
+    path('api/finance/', include('finance.urls')),
 
 
     # JWT token endpoints (POST to obtain tokens)
