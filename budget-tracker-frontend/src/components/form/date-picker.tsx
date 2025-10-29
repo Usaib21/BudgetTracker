@@ -61,7 +61,7 @@
 
 // // D:\College-Portal\college-portal\src\components\form\date-picker.tsx
 'use client';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import flatpickr from 'flatpickr';
 import type { Options } from 'flatpickr/dist/types/options';
 import 'flatpickr/dist/flatpickr.css';
@@ -70,7 +70,7 @@ import { CalenderIcon } from '../../icons';
 
 interface DatePickerProps {
   id: string;
-  name: string;
+  name?: string;
   mode?: Options['mode'];
   onChange?: (value: string) => void;
   onBlur?: () => void;

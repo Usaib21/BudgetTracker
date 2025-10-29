@@ -11,7 +11,7 @@ interface DropdownProps {
 
 const Dropdown: React.FC<DropdownProps> = ({
     name,
-    value,
+    // value,
     className = '',
     open,
     close,

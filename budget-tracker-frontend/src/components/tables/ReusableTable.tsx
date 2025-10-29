@@ -113,10 +113,10 @@ export default function ReusableTable<T>({
     currentPage,
     totalPages,
     onPageChange,
-    tableName,
+    // tableName,
     filterSection,
     emptyMessage = 'No Data Found',
-    emptyComponent,
+    // emptyComponent,
 }: ReusableTableProps<T>) {
     const hasData = Array.isArray(data) && data.length > 0;
     return (
