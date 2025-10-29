@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
 
     # your finance app routes
     # path('api/finance/', include('finance.urls')),
+    path('', lambda request: JsonResponse({'message': 'Budget Tracker API is live 🚀'})),
     path('api/finance/', include('backend.finance.urls')),
 
 
