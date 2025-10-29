@@ -11,6 +11,18 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from environ import Env
+import os
+import dj_database_url
+
+# Initialize environ
+env = Env()
+Env.read_env()
+# ENVIRONMENT = env('ENVIRONMENT', default='production')
+# Environment Variables
+ENVIRONMENT = env('ENVIRONMENT', default='production')
+POSTGRES_LOCALLY = env.bool('POSTGRES_LOCALLY', default=False)
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +32,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4*5kt%2%#(7&b6x_hxs)-4!jpo*0+c2f)@^)oou)1=ue3iu^s8'
+# SECRET_KEY = 'django-insecure-4*5kt%2%#(7&b6x_hxs)-4!jpo*0+c2f)@^)oou)1=ue3iu^s8'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# SECRET_KEY = 'django-insecure-#^$tnd5c66i-(=!myz89vtfr3$&e8rs@3+3m0-v$hnn711odm)'
+SECRET_KEY =env('SECRET_KEY')
+# SECURITY WARNING: don't run with debug turned on in production!
+if ENVIRONMENT=="development":
+  DEBUG = True
+else:
+   DEBUG = False
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# ✅ Allowed Hosts — include Render + Vercel
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.onrender.com',                # Render backend domain
+    '.vercel.app',                  # Vercel frontend domain
+]
 
-ALLOWED_HOSTS = []
+INTERNAL_IPS = [
+    "127.0.0.1",
+    "localhost",
+]
+# ✅ CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://localhost",
+    "https://*.onrender.com",
+    "https://*.vercel.app",
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition
@@ -74,6 +112,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all domains to access API (for development)
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOW_HEADERS = ["*"]  
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -84,6 +127,9 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+# Use PostgreSQL in production or when POSTGRES_LOCALLY=True
+if ENVIRONMENT == 'production' or POSTGRES_LOCALLY:
+    DATABASES['default'] = dj_database_url.config(default=env('DATABASE_URL'))
 
 
 # Password validation
@@ -139,9 +185,19 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
+# https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+# STATIC_URL = 'static/'
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Ensure Whitenoise serves static files correctly
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
