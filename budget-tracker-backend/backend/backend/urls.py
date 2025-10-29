@@ -25,7 +25,9 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),
 
     # your finance app routes
-    path('api/finance/', include('finance.urls')),
+    # path('api/finance/', include('finance.urls')),
+    path('api/finance/', include('backend.finance.urls')),
+
 
     # JWT token endpoints (POST to obtain tokens)
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
