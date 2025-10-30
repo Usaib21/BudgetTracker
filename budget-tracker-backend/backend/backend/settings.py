@@ -166,9 +166,13 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
+
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",   # React dev
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:4173",  # Vite preview
+    "https://budget-tracker-ten-olive.vercel.app"
 ]
+
 CORS_ALLOW_ALL_ORIGINS = True
 
 
