@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
+  DocsIcon
 
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -49,6 +50,13 @@ const navItems: NavItem[] = [
       // { name: 'Add Transaction', path: '/TransactionForm' },
       { name: 'Add Transaction', path: '/transactions/new' },
     ],
+  },
+
+  {
+    icon: <DocsIcon />,
+    name: "Documentation",
+    path: '/docs',
+    // subItems: [{ name: "Ecommerce", path: "/", pro: false }],
   },
   // {
   //   icon: <CalenderIcon />,

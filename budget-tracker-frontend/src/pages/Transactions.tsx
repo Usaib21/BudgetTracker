@@ -470,6 +470,7 @@ export default function Transactions() {
 
     return (
         <div className="container mx-auto">
+            <PageBreadcrumb pageTitle="Transactions List" />
             {loading && (
                 <div className="page-bar p-8">
                     <div className="flex items-center justify-center h-64">
@@ -490,7 +491,7 @@ export default function Transactions() {
                 />
             )}
             <ConfirmModal />
-            <PageBreadcrumb pageTitle="Transactions List" />
+            
 
             {!loading && (
                 <>

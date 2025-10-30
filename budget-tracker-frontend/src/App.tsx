@@ -21,6 +21,7 @@ import Home from "./pages/Dashboard/Home";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import TransactionForm from "./pages/TransactionForm";
+import Documentation from "./pages/Documentation";
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />
           <Route path="/dashboardd" element={<Dashboard />} />
+          <Route path="/docs" element={<Documentation />} />
 
         </Routes>
       </Router>
