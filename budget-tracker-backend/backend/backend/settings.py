@@ -17,7 +17,7 @@ import dj_database_url
 
 # Initialize environ
 env = Env()
-Env.read_env()
+# Env.read_env()
 # ENVIRONMENT = env('ENVIRONMENT', default='production')
 # Environment Variables
 ENVIRONMENT = env('ENVIRONMENT', default='production')
@@ -112,7 +112,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all domains to access API (for development)
+# CORS_ALLOW_ALL_ORIGINS = True  # Allow all domains to access API (for development)
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = ["*"]  
@@ -121,15 +121,38 @@ CORS_ALLOW_HEADERS = ["*"]
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
+# Database
+DATABASE_URL = env("DATABASE_URL", default=None)
+
+if DATABASE_URL:
+    # ✅ Use PostgreSQL (Render)
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+        )
     }
-}
+else:
+    # ✅ Local fallback SQLite
+    print("⚠️ DATABASE_URL not found — using SQLite fallback")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
 # Use PostgreSQL in production or when POSTGRES_LOCALLY=True
-if ENVIRONMENT == 'production' or POSTGRES_LOCALLY:
-    DATABASES['default'] = dj_database_url.config(default=env('DATABASE_URL'))
+# if ENVIRONMENT == 'production' or POSTGRES_LOCALLY:
+#     DATABASES['default'] = dj_database_url.config(default=env('DATABASE_URL'))
 
 
 # Password validation
@@ -173,7 +196,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://budget-tracker-ten-olive.vercel.app"
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Internationalization

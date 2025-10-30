@@ -1,5 +1,5 @@
 // src/pages/TransactionForm.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import Form from '../components/form/Form';
 import ComponentCard from '../components/form/ComponentCard';
@@ -49,6 +49,8 @@ export default function TransactionForm() {
         description?: string;
     } | null>(null);
 
+    const fetchedFor = useRef<Record<string, boolean>>({}); // track fetch state per id (or "new")
+
     const {
         formData,
         errors,
@@ -69,10 +71,17 @@ export default function TransactionForm() {
     );
 
     useEffect(() => {
+        const key = id ?? '__new__';
+        if (fetchedFor.current[key]) {
+            // Already fetched for this id/new form — skip
+            return;
+        }
+        // mark as fetched so we don't call again for same key
+        fetchedFor.current[key] = true;
+
         async function loadData() {
             setLoading(true);
             try {
-
                 const categoriesResponse = await api.get('finance/categories/');
 
                 // Normalize response -> results / data / direct array
@@ -111,7 +120,8 @@ export default function TransactionForm() {
                                     singleCat = singleCat.results[0];
                                 }
                                 if (singleCat && singleCat.id) {
-                                    newCategories = [...newCategories, singleCat];                                }
+                                    newCategories = [...newCategories, singleCat];
+                                }
                             } catch (err) {
                                 console.warn('[TransactionForm] could not fetch missing category detail', err);
                             }
@@ -121,7 +131,7 @@ export default function TransactionForm() {
                         // then set formData.category_id as the string value
                         setCategories(newCategories);
                         setFormData({
-                            category_id: String(transaction.category || ''), // ensure string, not number
+                            category_id: catIdStr, // ensure string, not number
                             amount: transaction.amount?.toString() || '',
                             date: transaction.date || new Date().toISOString().split('T')[0],
                             note: transaction.note || '',
@@ -157,9 +167,8 @@ export default function TransactionForm() {
         }
 
         loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, setFormData]);
-
-
 
     // Clear selected category if it doesn't match the currently selected transaction type
     useEffect(() => {
@@ -258,14 +267,6 @@ export default function TransactionForm() {
                 <Message type={alert.type} message={alert.message} description={alert.description} onClose={() => setAlert(null)} />
             )}
 
-            {/* Page Header */}
-            {/* <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90">{id ? 'Edit Transaction' : 'Add New Transaction'}</h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">
-                    {id ? 'Update your transaction details' : 'Create a new income or expense transaction'}
-                </p>
-            </div> */}
-
             <PageBreadcrumb pageTitle={id ? 'Update Transaction' : 'Add New Transaction'} />
 
             <ComponentCard title={id ? 'Edit Transaction' : 'Add Transaction'} className="mx-auto mt-4 max-w-2xl">
@@ -310,15 +311,6 @@ export default function TransactionForm() {
                                 placeholder="Select a category"
                             />
                             {errors.category_id && <span className="text-sm text-red-500 mt-1 block">{errors.category_id}</span>}
-                            {/* {filteredCategories.length === 0 && categories.length > 0 && (
-                                <span className="text-sm text-yellow-600 mt-1 block">
-                                    No {formData.is_income ? 'income' : 'expense'} categories found.
-                                    {formData.is_income ? ' Switch to expense or create income categories.' : ' Switch to income or create expense categories.'}
-                                </span>
-                            )} */}
-                            {/* {categories.length === 0 && (
-                                <span className="text-sm text-yellow-600 mt-1 block">No categories found. Please create categories first in the admin panel.</span>
-                            )} */}
                         </div>
 
                         {/* Amount */}

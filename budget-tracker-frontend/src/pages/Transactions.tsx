@@ -1,6 +1,5 @@
-
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import api from '../api/axios';
 import { type Transaction } from '../types';
 import { Link } from 'react-router';
@@ -12,6 +11,10 @@ import Badge from '../components/ui/badge/Badge';
 import SearchInput from '../components/form/input/SearchInput';
 import FilterSelect from '../components/form/input/FilterSelect';
 import Dropdown from '../components/form/input/Dropdown';
+
+// Module-level flag to avoid double initial fetch due to React Strict Mode remounts in dev.
+// This persists across unmount/mount cycles.
+let hasInitialFetched = false;
 
 export default function Transactions() {
     const [items, setItems] = useState<Transaction[]>([]);
@@ -30,7 +33,7 @@ export default function Transactions() {
     const [categoriesMap, setCategoriesMap] = useState<Record<string, string>>({});
     const [categories, setCategories] = useState<Array<{ value: string; label: string }>>([]);
 
-    // Filter states - CHANGED: using searchKey instead of searchId
+    // Filter states
     const [searchKey, setSearchKey] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedType, setSelectedType] = useState('ALL');
@@ -38,12 +41,19 @@ export default function Transactions() {
 
     const itemsPerPage = 5;
 
+    // Keep this for skipping the first run of the filters effect inside the same mounted instance
+    const hasFilterEffectRunRef = useRef(false);
+
+    // Dedupe in-flight requests keyed by logical request (page + filters)
+    // allow undefined values so the `if` check makes sense to TS
+    const inFlightRequests = useRef<Record<string, Promise<void> | undefined>>({});
+
+
     // Fetch categories and build id -> name map
     const fetchCategories = async () => {
         try {
             const res = await api.get('finance/categories/');
             let data: any = res.data;
-            // Normalize common shapes: results / data / direct array
             if (data && typeof data === 'object') {
                 if (Array.isArray(data.results)) data = data.results;
                 else if (Array.isArray(data.data)) data = data.data;
@@ -80,7 +90,6 @@ export default function Transactions() {
             limit: itemsPerPage
         };
 
-        // Add filters to params - CHANGED: using searchKey and proper parameter names
         if (searchKey) params.searchKey = searchKey;
         if (selectedCategory) params.category = selectedCategory;
         if (selectedType && selectedType !== 'ALL') {
@@ -90,122 +99,141 @@ export default function Transactions() {
         return { url, params };
     };
 
+    // Main fetch with dedupe
     const fetchTransactions = async (pageNo: number) => {
-        setLoading(true);
-        setError(null);
+        // Build a stable key for this logical request (page + filters)
+        const requestKey = `transactions|p:${pageNo}|q:${searchKey}|c:${selectedCategory}|t:${selectedType}`;
 
-        const { url, params } = buildApiUrl(pageNo);
+        // If we already have an in-flight promise for this same logical request, reuse it
+        if (inFlightRequests.current[requestKey]) {
+            return inFlightRequests.current[requestKey];
+        }
 
-        const attempts: Array<{
-            desc: string;
-            url?: string;
-            params?: Record<string, any>;
-            rawUrl?: string;
-        }> = [
-                { desc: 'query (page=pageNo, page_size & limit)', url, params },
-                { desc: 'query (page=pageNo-1 zero-based)', url, params: { ...params, page: pageNo - 1 } },
-                { desc: 'query (page=pageNo only)', url, params: { page: pageNo } },
-                {
-                    desc: 'raw query with filters',
-                    rawUrl: `finance/transactions/?page=${pageNo}&limit=${itemsPerPage}${searchKey ? `&searchKey=${encodeURIComponent(searchKey)}` : ''
-                        }${selectedCategory ? `&category=${encodeURIComponent(selectedCategory)}` : ''
-                        }${selectedType && selectedType !== 'ALL' ? `&is_income=${selectedType === 'Income'}` : ''
-                        }`
-                },
-                { desc: 'path /page/{n}/', rawUrl: `finance/transactions/page/${pageNo}/` },
-                { desc: 'path /{n}/', rawUrl: `finance/transactions/${pageNo}/` },
-                { desc: 'base endpoint (no page param) — fallback', url, params: {} },
-            ];
+        // Store promise so concurrent callers reuse it
+        const fetchPromise = (async () => {
+            setLoading(true);
+            setError(null);
 
-        let usedResponseData: any = null;
-        let success = false;
-        let lastErr: any = null;
+            const { url, params } = buildApiUrl(pageNo);
 
-        for (const attempt of attempts) {
-            try {
-                let res;
-                if (attempt.rawUrl) {
-                    res = await api.get(attempt.rawUrl);
-                } else {
-                    res = await api.get(attempt.url!, { params: attempt.params });
+            const attempts: Array<{
+                desc: string;
+                url?: string;
+                params?: Record<string, any>;
+                rawUrl?: string;
+            }> = [
+                    { desc: 'query (page=pageNo, page_size & limit)', url, params },
+                    { desc: 'query (page=pageNo-1 zero-based)', url, params: { ...params, page: pageNo - 1 } },
+                    { desc: 'query (page=pageNo only)', url, params: { page: pageNo } },
+                    {
+                        desc: 'raw query with filters',
+                        rawUrl: `finance/transactions/?page=${pageNo}&limit=${itemsPerPage}${searchKey ? `&searchKey=${encodeURIComponent(searchKey)}` : ''
+                            }${selectedCategory ? `&category=${encodeURIComponent(selectedCategory)}` : ''
+                            }${selectedType && selectedType !== 'ALL' ? `&is_income=${selectedType === 'Income'}` : ''
+                            }`
+                    },
+                    { desc: 'path /page/{n}/', rawUrl: `finance/transactions/page/${pageNo}/` },
+                    { desc: 'path /{n}/', rawUrl: `finance/transactions/${pageNo}/` },
+                    { desc: 'base endpoint (no page param) — fallback', url, params: {} },
+                ];
+
+            let usedResponseData: any = null;
+            let success = false;
+            let lastErr: any = null;
+
+            for (const attempt of attempts) {
+                try {
+                    let res;
+                    if (attempt.rawUrl) {
+                        res = await api.get(attempt.rawUrl);
+                    } else {
+                        res = await api.get(attempt.url!, { params: attempt.params });
+                    }
+                    usedResponseData = res.data;
+                    success = true;
+                    break;
+                } catch (err: any) {
+                    lastErr = err;
+                    console.warn(`[Transactions] attempt failed (${attempt.desc}):`, err?.response?.status || err?.message);
                 }
-                usedResponseData = res.data;
-                success = true;
-                break;
-            } catch (err: any) {
-                lastErr = err;
-                console.warn(`[Transactions] attempt failed (${attempt.desc}):`, err?.response?.status || err?.message);
-                // try next
             }
-        }
 
-        if (!success) {
-            setError(lastErr?.message || `Failed to fetch transactions (status: ${lastErr?.response?.status || 'unknown'})`);
-            setItems([]);
-            setCount(0);
-            setTotalPages(1);
-            setLoading(false);
-            return;
-        }
+            if (!success) {
+                setError(lastErr?.message || `Failed to fetch transactions (status: ${lastErr?.response?.status || 'unknown'})`);
+                setItems([]);
+                setCount(0);
+                setTotalPages(1);
+                setLoading(false);
+                return;
+            }
 
-        // Normalize response shapes
-        const data = usedResponseData;
-        let serverItems: Transaction[] = [];
-        let totalCount = 0;
-        let serverPaginated = false; // whether server returned page-specific items
+            const data = usedResponseData;
+            let serverItems: Transaction[] = [];
+            let totalCount = 0;
+            let serverPaginated = false;
 
-        if (Array.isArray(data)) {
-            serverItems = data;
-            totalCount = data.length;
-            serverPaginated = false;
-        } else if (data && Array.isArray(data.results)) {
-            serverItems = data.results;
-            totalCount = typeof data.count === 'number' ? data.count : serverItems.length;
-            serverPaginated = true;
-        } else if (data && data.data && Array.isArray(data.data.list)) {
-            serverItems = data.data.list;
-            totalCount = typeof data.data.total === 'number' ? data.data.total : serverItems.length;
-            serverPaginated = true;
-        } else if (data && Array.isArray(data.list)) {
-            serverItems = data.list;
-            totalCount = typeof data.total === 'number' ? data.total : serverItems.length;
-            serverPaginated = true;
-        } else {
-            const arr = Object.values(data || {}).find(Array.isArray) as any;
-            if (Array.isArray(arr)) {
-                serverItems = arr;
-                totalCount = serverItems.length;
+            if (Array.isArray(data)) {
+                serverItems = data;
+                totalCount = data.length;
                 serverPaginated = false;
+            } else if (data && Array.isArray(data.results)) {
+                serverItems = data.results;
+                totalCount = typeof data.count === 'number' ? data.count : serverItems.length;
+                serverPaginated = true;
+            } else if (data && data.data && Array.isArray(data.data.list)) {
+                serverItems = data.data.list;
+                totalCount = typeof data.data.total === 'number' ? data.data.total : serverItems.length;
+                serverPaginated = true;
+            } else if (data && Array.isArray(data.list)) {
+                serverItems = data.list;
+                totalCount = typeof data.total === 'number' ? data.total : serverItems.length;
+                serverPaginated = true;
             } else {
-                serverItems = [];
-                totalCount = 0;
-                serverPaginated = false;
+                const arr = Object.values(data || {}).find(Array.isArray) as any;
+                if (Array.isArray(arr)) {
+                    serverItems = arr;
+                    totalCount = serverItems.length;
+                    serverPaginated = false;
+                } else {
+                    serverItems = [];
+                    totalCount = 0;
+                    serverPaginated = false;
+                }
             }
+
+            if (!totalCount && serverItems.length) totalCount = serverItems.length;
+
+            const serverReturnedTooMany = serverItems.length > itemsPerPage;
+            const serverReturnedFullListButMarkedPaginated = serverPaginated && totalCount > itemsPerPage && serverItems.length === totalCount;
+
+            const needClientSidePagination = !serverPaginated || serverReturnedTooMany || serverReturnedFullListButMarkedPaginated;
+
+            let finalItems: Transaction[] = [];
+
+            if (needClientSidePagination) {
+                const fullList = serverItems;
+                const start = (pageNo - 1) * itemsPerPage;
+                const paged = fullList.slice(start, start + itemsPerPage);
+                finalItems = paged;
+            } else {
+                finalItems = serverItems || [];
+            }
+
+            setItems(finalItems);
+            setCount(totalCount);
+            setCurrentPage(pageNo);
+            setTotalPages(Math.max(1, Math.ceil((totalCount || 0) / itemsPerPage)));
+            setLoading(false);
+        })();
+
+        // Store promise and ensure cleanup when done
+        inFlightRequests.current[requestKey] = fetchPromise;
+        try {
+            await fetchPromise;
+        } finally {
+            // remove in-flight marker so future calls can run (or re-use new)
+            delete inFlightRequests.current[requestKey];
         }
-
-        if (!totalCount && serverItems.length) totalCount = serverItems.length;
-
-        const serverReturnedTooMany = serverItems.length > itemsPerPage;
-        const serverReturnedFullListButMarkedPaginated = serverPaginated && totalCount > itemsPerPage && serverItems.length === totalCount;
-
-        const needClientSidePagination = !serverPaginated || serverReturnedTooMany || serverReturnedFullListButMarkedPaginated;
-
-        let finalItems: Transaction[] = [];
-
-        if (needClientSidePagination) {
-            const fullList = serverItems;
-            const start = (pageNo - 1) * itemsPerPage;
-            const paged = fullList.slice(start, start + itemsPerPage);
-            finalItems = paged;
-        } else {
-            finalItems = serverItems || [];
-        }
-
-        setItems(finalItems);
-        setCount(totalCount);
-        setCurrentPage(pageNo);
-        setTotalPages(Math.max(1, Math.ceil((totalCount || 0) / itemsPerPage)));
-        setLoading(false);
     };
 
     const handleDeleteTransaction = async (id: number, amount: string) => {
@@ -222,6 +250,7 @@ export default function Transactions() {
                         type: 'success',
                         message: 'Transaction deleted successfully',
                     });
+                    // refresh current page
                     fetchTransactions(currentPage);
                 } catch (err: any) {
                     setAlert({
@@ -245,6 +274,7 @@ export default function Transactions() {
 
     const handleFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
         setter(value);
+        // don't call fetch here; let the filters effect handle it (so it always goes to page 1)
         setCurrentPage(1);
     };
 
@@ -264,7 +294,6 @@ export default function Transactions() {
         return date.toLocaleDateString('en-GB');
     };
 
-    // Type options for dropdown
     const typeOptions = [
         { value: 'ALL', label: 'All' },
         { value: 'Income', label: 'Income' },
@@ -295,10 +324,8 @@ export default function Transactions() {
         ),
     };
 
-    // Filter Section Component - CHANGED: using searchKey and proper placeholder
     const TransactionFilters = () => (
         <div className="grid grid-cols-12 gap-4 mb-6">
-            {/* Search by ID - 6 columns */}
             <div className="col-span-12 md:col-span-6">
                 <SearchInput
                     value={searchKey}
@@ -308,7 +335,6 @@ export default function Transactions() {
                 />
             </div>
 
-            {/* Filter by Category - 4 columns */}
             <div className="col-span-12 md:col-span-4">
                 <FilterSelect
                     options={categories}
@@ -318,7 +344,6 @@ export default function Transactions() {
                 />
             </div>
 
-            {/* Filter by Type - 2 columns */}
             <div className="col-span-12 md:col-span-2 flex justify-end">
                 <Dropdown
                     name={typeNames[selectedType]}
@@ -342,7 +367,6 @@ export default function Transactions() {
         </div>
     );
 
-    // columns remain the same...
     const columns = [
         {
             header: 'ID',
@@ -357,9 +381,7 @@ export default function Transactions() {
             accessor: (transaction: Transaction) => {
                 const cat = (transaction as any).category;
                 if (!cat) return '-';
-                // if the API returns nested object
                 if (typeof cat === 'object') return (cat.name || '-') as any;
-                // if API returns numeric id or string id -> lookup via categoriesMap
                 const name = categoriesMap[String(cat)];
                 return name ? name : `#${cat}`;
             },
@@ -452,18 +474,29 @@ export default function Transactions() {
         },
     ];
 
-    // Refetch when filters change
+    // Refetch when filters change — skip first-mount run for the same mounted instance
     useEffect(() => {
-        fetchTransactions(currentPage);
+        if (!hasFilterEffectRunRef.current) {
+            hasFilterEffectRunRef.current = true;
+            return;
+        }
+        // when filters change, always go to first page
+        setCurrentPage(1);
+        fetchTransactions(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCategory, selectedType]);
 
-    // initialize: load categories first, then transactions
+    // initialize: load categories first, then transactions — guard against double-run in StrictMode/dev
     useEffect(() => {
+        if (hasInitialFetched) return;
+        hasInitialFetched = true;
+
         (async () => {
             setLoading(true);
             await fetchCategories();
             await fetchTransactions(1);
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     if (error) return <div className="text-red-500">Error: {error}</div>;
@@ -491,7 +524,6 @@ export default function Transactions() {
                 />
             )}
             <ConfirmModal />
-            
 
             {!loading && (
                 <>

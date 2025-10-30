@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router';
 import api from '../api/axios';
 import { IncomeExpenseDonut } from '../components/D3/IncomeExpenseDonut';
@@ -8,19 +8,31 @@ import type { Summary, Transaction } from '../types';
 export default function Dashboard() {
     const [summary, setSummary] = useState<Summary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const fetchedRef = useRef(false); // <-- guard to prevent duplicate fetches
 
     useEffect(() => {
+        if (fetchedRef.current) return; // already fetched for this mount
+        fetchedRef.current = true;
+
         async function fetchData() {
             try {
-                const s = await api.get('finance/summary/');
-                const t = await api.get('finance/transactions/');
+                const [s, t] = await Promise.all([
+                    api.get('finance/summary/'),
+                    api.get('finance/transactions/'),
+                ]);
+
                 setSummary(s.data);
-                const allTransactions = t.data.results || [];
-                setTransactions(allTransactions.slice(0, 5)); // ✅ show only latest 5
+
+                // tolerate different shapes (results / data / direct array)
+                const allTransactions =
+                    (t.data && (Array.isArray(t.data.results) ? t.data.results : Array.isArray(t.data) ? t.data : t.data.results || []))
+                    || [];
+                setTransactions(allTransactions.slice(0, 5)); // show only latest 5
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
             }
         }
+
         fetchData();
     }, []);
 
